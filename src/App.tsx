@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react'
 
+const apiUrl = "https://script.google.com/macros/s/AKfycbxJfXYj8WicckSBdQP-dQRbA7b89UXj7JWxbbDlZixY_Rvw9roCN8VTJXndqtnPcTDZWg/exec";
+
+
 type GitftlistItem = {
   name: string,
   link: string,
   reservedBy: string,
+  changing?: boolean,
+}
+
+const User = {
+  name: '',
 }
 
 function App() {
+  const [updating, setUpdating] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [postingToServer, setPosting] = useState(false)
   const [giftList, setGiftlist] = useState<GitftlistItem[]>([])
-  const [user, setUser] = useState({ name: '' })
 
-  const apiUrl = "https://script.google.com/macros/s/AKfycbxJfXYj8WicckSBdQP-dQRbA7b89UXj7JWxbbDlZixY_Rvw9roCN8VTJXndqtnPcTDZWg/exec";
-
+  
   useEffect(
     () => {
       if (!loading) { return }
@@ -25,34 +31,28 @@ function App() {
     [loading]
   )
 
-  const changeTheme = () => {}
-
-  const onReserve = (item:GitftlistItem) =>
-    () => {
-      let userName = user.name
-      if (!userName) {
-        userName = prompt('what y name')!
-        setUser({ name: userName })
-      }
-      setPosting(true)
-      fetch(
-        `${apiUrl}?action=reserveGift&name=${encodeURIComponent(item.name)}&person=${encodeURIComponent(userName)}`,
-        {
-          method: 'POST',
-        }
-      ).then(() => { setPosting(false); setLoading(true) })
+  const ensureUser = () => {
+    let username = User.name
+    if (!username) {
+      username = prompt("What's your name?") || ''
+      User.name = username
     }
+    return User
+  }
 
-  const onUnreserve = (item:GitftlistItem) =>
-    () => {
-      setPosting(true)
-      fetch(
-        `${apiUrl}?action=unreserveGift&name=${encodeURIComponent(item.name)}`,
-        {
-          method: 'POST',
-        }
-      ).then(() => { setPosting(false); setLoading(true) })
-    } 
+  const onGiftlistItemAction = (item:GitftlistItem) => {
+    item.changing = true
+    setUpdating(true)
+  }
+
+  const onGiftlistItemActionResult = () => {
+    setUpdating(false)
+    setLoading(true)
+  }
+
+  const availableitems = giftList.filter(item => !item.reservedBy)
+  const reserveditems = giftList.filter(item => item.reservedBy && item.reservedBy !== User.name)
+  const myitems = giftList.filter(item => item.reservedBy && item.reservedBy === User.name)
 
   return (
     <>
@@ -89,32 +89,105 @@ function App() {
     </section>
     <section id='giftList'>
       <h2>List of gift suggestions</h2>
-        <div className="list-container">
-            <div className="spinner" id="spinner"></div>
-            {(loading || postingToServer) && <progress />}
+      <div className="list-container">
+          <div className="spinner" id="spinner"></div>
+          {giftList.length === 0 && <center><progress /></center>}
+
+          {myitems.length > 0 && <>
+            <h3>Your Items</h3>
             <ul className="list-items">
-              {giftList.map(item => <>
-                <li className='list-item' key={item.name}>
-                  <h3>{item.name}</h3>
-                  <ul className='item-actions'>
-                    <li className='gift-website'><a href={item.link} target='_blank'>View on website</a></li>
-                  {
-                    (user.name && item.reservedBy === user.name && <>
-                      <li className='gift-reserved'>Reserved by you <button className="unreserve" onClick={onUnreserve(item)}>Unreserve</button></li>
-                    </>)
-                    ||
-                    (item.reservedBy &&  <li className='gift-reserved'>Reserved by someone else</li>)
-                    ||
-                    <li className='gift-reserve'><button onClick={onReserve(item)} data-title="Reserve this gift to make sure it's not gifted twice">Reserve</button></li>
-                  }
-                  </ul>
-                </li>
+              {myitems.map(item => <>
+                  <GiftlistItemListItem
+                    item={item}
+                    ensureUser={ensureUser}
+                    onPosting={onGiftlistItemAction}
+                    onResult={onGiftlistItemActionResult}
+                  />
+                </>)}
+            </ul>
+          </>}
+          {availableitems.length > 0 && <>
+            <h3>Items in search of a home</h3>
+            <ul className="list-items">
+              {availableitems.map(item => <>
+                <GiftlistItemListItem
+                  item={item}
+                  ensureUser={ensureUser}
+                  onPosting={onGiftlistItemAction}
+                  onResult={onGiftlistItemActionResult}
+                />
               </>)}
             </ul>
+          </>}
+          {reserveditems.length > 0 && <>
+            <h3>Items from other peoples</h3>
+            <ul className="list-items">
+              {reserveditems.map(item => <>
+                  <GiftlistItemListItem
+                    item={item}
+                    ensureUser={ensureUser}
+                    onPosting={onGiftlistItemAction}
+                    onResult={onGiftlistItemActionResult}
+                  />
+              </>)}
+            </ul>
+          </>}
         </div>
     </section>
     </>
   )
+}
+
+function GiftlistItemListItem({ item, ensureUser, onPosting, onResult }) {
+  const onReserve = (item:GitftlistItem) =>
+    () => {
+      let userName = ensureUser().name
+      onPosting(item)
+      fetch(
+        `${apiUrl}?action=reserveGift&name=${encodeURIComponent(item.name)}&person=${encodeURIComponent(userName)}`,
+        {
+          method: 'POST',
+        }
+      ).then(() => { onResult() }) //setPosting(false); setLoading(true) })
+    }
+
+  const onUnreserve = (item:GitftlistItem) =>
+    () => {
+      onPosting(item)
+      fetch(
+        `${apiUrl}?action=unreserveGift&name=${encodeURIComponent(item.name)}`,
+        {
+          method: 'POST',
+        }
+      ).then(() => { onResult() })
+    }
+  return <>
+    <li className='list-item' key={item.name}>
+      <h3>{item.name}</h3>
+      <ul className='item-actions'>
+        <li className='gift-website'><a href={item.link} target='_blank'>View on website</a></li>
+      {
+        (User.name && item.reservedBy === User.name && <>
+          <li className='gift-reserved'>
+            Reserved by you
+            <button className="unreserve" onClick={onUnreserve(item)}>
+              {item.changing && <progress /> || 'Unreserve'}
+            </button>
+          </li>
+        </>)
+        ||
+        (item.reservedBy &&  <li className='gift-reserved'>Reserved by someone else</li>)
+        ||
+        <li className='gift-reserve'>
+          <button onClick={onReserve(item)} data-title="Reserve this gift to make sure it's not gifted twice">
+            {item.changing && <progress /> || 'Reserve'}
+          </button>
+          
+        </li>
+      }
+      </ul>
+    </li>
+  </>
 }
 
 export default App
