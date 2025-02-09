@@ -47,7 +47,7 @@ function App() {
     () => {
       setPosting(true)
       fetch(
-        `${apiUrl}?action=unreserveGift&name=${encodeURIComponent(item.name)}}`,
+        `${apiUrl}?action=unreserveGift&name=${encodeURIComponent(item.name)}`,
         {
           method: 'POST',
         }
